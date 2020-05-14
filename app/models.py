@@ -28,14 +28,7 @@ class PaginatedAPIMixin(object):
                 'total_pages': resources.pages,
                 'total_items': resources.total
             },
-            '_links': {
-                'self': url_for(endpoint, page=page, per_page=per_page,
-                                **kwargs),
-                'next': url_for(endpoint, page=page + 1, per_page=per_page,
-                                **kwargs) if resources.has_next else None,
-                'prev': url_for(endpoint, page=page - 1, per_page=per_page,
-                                **kwargs) if resources.has_prev else None
-            }
+
         }
         return data
 
@@ -44,7 +37,7 @@ class User(PaginatedAPIMixin, UserMixin, db.Model):
     username = db.Column(db.String(64), index=True, unique=True)
     email = db.Column(db.String(120), index=True, unique=True)
     password_hash = db.Column(db.String(128))
-    posts = db.relationship('Post', backref='author', lazy='dynamic')
+    devices = db.relationship('Device', backref='owner', lazy='dynamic')
     token = db.Column(db.String(32), index=True, unique=True)
     token_expiration = db.Column(db.DateTime)
     
@@ -80,7 +73,7 @@ class User(PaginatedAPIMixin, UserMixin, db.Model):
         now = datetime.utcnow()
         if self.token and self.token_expiration > now + timedelta(seconds=60):
             return self.token
-        self.token = base64.b64encode(os.urandom(24)).decode('utf-8')
+        self.token = base64.b16encode(os.urandom(4)).decode('utf-8')
         self.token_expiration = now + timedelta(seconds=expires_in)
         db.session.add(self)
         return self.token
@@ -96,15 +89,60 @@ class User(PaginatedAPIMixin, UserMixin, db.Model):
         return user
             
 
-#posting a post
-class Post(db.Model):
+#device
+class Device(PaginatedAPIMixin,db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    body = db.Column(db.String(140))
-    timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
+    name = db.Column(db.String(64))
+    device_type = db.Column(db.String(32))
+    comment = db.Column(db.String(256))
+    date_reg = db.Column(db.DateTime, index=True, default=datetime.utcnow)
+    data = db.relationship('Data', backref='device', lazy='dynamic')
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    def from_dict(self, data, new_device=False):
+        for field in ['name','device_type', 'comment', 'date_reg']:
+            if field in data:
+                setattr(self, field, data[field])
+
+    def to_dict(self):
+        data = {
+            'device_id': self.id,
+            'name': self.name,
+            'device_type': self.device_type,
+            'comment': self.comment,
+            'date_reg': self.date_reg,
+            'owner': self.owner.username,
+
+        }
+        return data
 
     def __repr__(self):
-        return '<Post {}>'.format(self.body)
+        return '<Device {}>'.format(self.name)
+#data input   
+class Data(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    value = db.Column(db.String(64))
+    date = db.Column(db.DateTime, index=True, default=datetime.utcnow)
+    device_id = db.Column(db.Integer, db.ForeignKey('device.id'))
+    
+    def from_dict(self, data):
+        for field in ['value','date']:
+            if field in data:
+                setattr(self, field, data[field])
+
+    def to_dict(self):
+        data = {
+            'id': self.id,
+            'value': self.value,
+            'date': self.date,
+            'device_id': self.device_id,
+
+        }
+        return data
+
+
+    def __repr__(self):
+        return '<Data {}>'.format(self.value)
     
 #gets the ID of the user when they log in
 @login.user_loader

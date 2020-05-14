@@ -12,6 +12,7 @@ from werkzeug.urls import url_parse
 from flask import request
 from app.l_form import LoginForm
 #
+from app.chart import returnChartVal
 
 @app.route('/')
 @app.route('/index')
@@ -59,13 +60,10 @@ def register():
         return redirect(url_for('login'))
     return render_template('register.html', title='Register', form=form)
 
-@app.route('/user/<username>')
+@app.route('/user/<username>', methods=['GET', 'POST'])
 @login_required
 def user(username):
     user = User.query.filter_by(username=username).first_or_404()
-    posts = [
-        {'author': user, 'body': 'Test post #1'},
-        {'author': user, 'body': 'Test post #2'}
-    ]
-    return render_template('user.html', user=user, posts=posts)
+    value, date = returnChartVal(user.devices.first(), 3600)
+    return render_template('user.html', value=value, date=date, user=user, device_name=str(user.devices.first().name))
 
